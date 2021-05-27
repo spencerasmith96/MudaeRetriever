@@ -7,6 +7,7 @@ class NameRetriever:
         self.maxRank = 0
         self.names = set()
         self.lastCommand : callable
+        self.__maxRankPrefix = "No result! Max rank: "
 
     def requestCharacter(self, rank: int):
         requestMessage = "$top #" + str(rank)
@@ -18,11 +19,15 @@ class NameRetriever:
 
         self.names.add(name)
 
-    def parseCharacterName(self, message: str, rank: int) -> Union[bool, str]:
+    def validCharacterPrefix(self, message: str, rank: int):
         prefix = "**#" + str(rank) + " - "
-        if(not message.startswith(prefix)):
+        return message.startswith(prefix)
+
+    def parseCharacterName(self, message: str, rank: int) -> Union[bool, str]:
+        if(not self.validCharacterPrefix(message, rank)):
             return False
 
+        prefix = "**#" + str(rank) + " - "
         leftIgnore = len(prefix)
         rightIgnore = message.rfind("**", leftIgnore)
         name = message[leftIgnore:rightIgnore]
@@ -33,11 +38,15 @@ class NameRetriever:
         writeCommand(requestMessage)
         self.lastCommand = self.requestCharacterNum
 
+    def validMax(self, message: str):
+        prefix = self.__maxRankPrefix
+        return message.startswith(prefix)
+
     def parseMaxCharacters(self, response: str):
-        prefix = "No result! Max rank: "
-        if(not response.startswith(prefix)):
+        if(not self.validMax(response)):
             return False
 
+        prefix = self.__maxRankPrefix
         leftIgnore = len(prefix)
         self.maxRank = int(response[leftIgnore:])
         return self.maxRank
