@@ -1,7 +1,8 @@
 import discord
 import os
-import json
-import KeyboardCommanding
+import asyncio
+from MudaeCharacter import MudaeCharacter
+from NameRetriever import NameRetriever
 from dotenv import load_dotenv
 
 prefix = "?"
@@ -11,44 +12,41 @@ load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 client = discord.Client()
 
-def rankMessageToName(rank, message):
-    rankLength = len(str(rank))
-    constPadding = len("**# - ")
-    left = rankLength + constPadding
-
-    right = message.rfind("**")
-
-    name = message[left:right]
-
-    return name
-
-def requestCharacters():
-    requestCharacters.currentRank += 1
-    requestMessage = "$top #" + str(requestCharacters.currentRank)
-    KeyboardCommanding.writeCommand(requestMessage)
-
-requestCharacters.currentRank = 0
 
 @client.event
 async def on_message(message):
     if message.author == client.user:
-        return
+        return  
+    
+    # Requests and compiles a list of all character names from Mudae
+    if message.content.startswith(prefix + "getName"):
 
-    if(on_message.gettingCharacters and message.author.id == mudaeID):
-        if(on_message.getStep == 0):
-            on_message.getStep = 1
-            on_message.name = rankMessageToName(requestCharacters.currentRank, message.content)
+        # Request max chars
+        maxRetry = 3
+        for retry in range(maxRetry):
+            on_message.names.requestCharacterNum()
+        
+            def check(message):
+                return message.author.id == mudaeID
+
+            try:
+                message = await client.wait_for('message', check=check, timeout = 5.0)
+            except asyncio.TimeoutError:
+                await message.channel.send("Mudae timed out. Retrying (" + str(retry + 1) + "/" + str(maxRetry) + ")")
+                if(retry + 1 == maxRetry):
+                    return
+            else:
+                break
+
+
+        response = on_message.names.parseMaxCharacters(message.content)
+        if(response == False):
+            print("Error, unable to parse max characters. Message:", message.content)
             return
-        if(on_message.getStep == 1):
-            print(on_message.name)
-            return
 
-    if message.content.startswith(prefix + "get"):
-        on_message.gettingCharacters = True
-        requestCharacters()
-        return
 
-on_message.gettingCharacters = False
-on_message.getStep = 0
+
+        
+on_message.names = NameRetriever()
 
 client.run(TOKEN)
