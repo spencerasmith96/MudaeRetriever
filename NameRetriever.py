@@ -1,20 +1,32 @@
 from KeyboardCommanding import writeCommand
+from typing import Union
 
 class NameRetriever:
     """Functions to retrieve and store character names from the Mudae bot"""
     def __init__(self):
-        self.currentRank = 0
         self.maxRank = 0
+        self.names = set()
         self.lastCommand : callable
 
-    def requestNext(self):
-        self.currentRank += 1
-        if(self.currentRank > self.maxRank):
+    def requestCharacter(self, rank: int):
+        requestMessage = "$top #" + str(rank)
+        writeCommand(requestMessage)
+
+    def addName(self, name):
+        if name in self.names:
             return False
 
-        requestMessage = "$top #" + str(self.currentRank)
-        writeCommand(requestMessage)
-        return True
+        self.names.add(name)
+
+    def parseCharacterName(self, message: str, rank: int) -> Union[bool, str]:
+        prefix = "**#" + str(rank) + " - "
+        if(not message.startswith(prefix)):
+            return False
+
+        leftIgnore = len(prefix)
+        rightIgnore = message.rfind("**", leftIgnore)
+        name = message[leftIgnore:rightIgnore]
+        return name
 
     def requestCharacterNum(self):
         requestMessage = "$top #"
