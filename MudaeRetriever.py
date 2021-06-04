@@ -100,8 +100,8 @@ async def retrieveNames(startRank: int, endRank: int, names, channel):
 
 def saveNames(names, rank):
     """ Saves names to txt document """
-
-    print("Progress: ", (rank/names.maxRank) * 100, "%", sep='')
+    percent = format((rank/names.maxRank) * 100, ".2f")
+    print("Progress: ", percent, "%", sep='')
 
     namesFile = open("names.txt", "w", encoding='utf-8')
     characterString = '\n'.join(names.names)
