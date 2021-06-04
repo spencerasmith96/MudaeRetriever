@@ -98,13 +98,27 @@ async def retrieveNames(startRank: int, endRank: int, names, channel):
             logError("Unable to add name: " + name + " at rank: " + str(rank))
             continue
 
-def saveNames(names):
+def saveNames(names, rank):
     """ Saves names to txt document """
 
     print("Progress: ", (rank/names.maxRank) * 100, "%", sep='')
 
     namesFile = open("names.txt", "w", encoding='utf-8')
-    namesFile.write("Characters: " + str(rank) + "\n" + str(names.names))
+    characterString = '\n'.join(names.names)
+    namesFile.write("Characters: " + str(rank) + "\n" + characterString)
+    namesFile.close()
+
+def loadNames(names):
+    namesFile = open("names.txt", "r", encoding='utf-8')
+    progressLine = namesFile.readline().rsplit(' ', 1)
+    lastRank = progressLine[1].strip()
+    if(lastRank.isdigit() == False):
+        namesFile.close()
+        return False
+
+    lastRank = int(lastRank)
+    thisNames = set(namesFile.read())
+    print(thisNames)
     namesFile.close()
 
 @client.event
@@ -119,8 +133,11 @@ async def on_message(message):
             return
         bulk = 100
         for rankStep in range(1, maxChars, bulk):
-            await retrieveNames(1, maxChars, on_message.names, message.channel)
-            saveNames(on_message.names)
+            await retrieveNames(rankStep, rankStep + bulk, on_message.names, message.channel)
+            saveNames(on_message.names, rankStep + bulk)
+
+    if message.content.startswith(prefix + "continueName"):
+        loadNames(on_message.names)
 
 on_message.names = NameRetriever()
 
