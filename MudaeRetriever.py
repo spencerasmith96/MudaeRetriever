@@ -109,7 +109,9 @@ def saveNames(names, rank):
     namesFile.close()
 
 def loadNames(names):
+    """ Loads names in names.names set and returns last saved rank """
     namesFile = open("names.txt", "r", encoding='utf-8')
+
     progressLine = namesFile.readline().rsplit(' ', 1)
     lastRank = progressLine[1].strip()
     if(lastRank.isdigit() == False):
@@ -117,9 +119,10 @@ def loadNames(names):
         return False
 
     lastRank = int(lastRank)
-    thisNames = set(namesFile.read())
-    print(thisNames)
+    thisNames = set(namesFile.read().splitlines())
+    names.names = thisNames
     namesFile.close()
+    return lastRank
 
 @client.event
 async def on_message(message):
@@ -136,8 +139,18 @@ async def on_message(message):
             await retrieveNames(rankStep, rankStep + bulk, on_message.names, message.channel)
             saveNames(on_message.names, rankStep + bulk)
 
-    if message.content.startswith(prefix + "continueName"):
-        loadNames(on_message.names)
+    if message.content.startswith(prefix + "continue"):
+        lastRank = loadNames(on_message.names)
+        if(lastRank == False):
+            logError("Unable to read last rank")
+            return
+        maxChars = await retrieveMaxChars(message.channel, on_message.names)
+        if(maxChars == False):
+            return
+        bulk = 100
+        for rankStep in range(lastRank, maxChars, bulk):
+            await retrieveNames(rankStep, rankStep + bulk, on_message.names, message.channel)
+            saveNames(on_message.names, rankStep + bulk)
 
 on_message.names = NameRetriever()
 
