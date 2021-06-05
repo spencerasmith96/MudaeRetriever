@@ -100,8 +100,9 @@ async def retrieveNames(startRank: int, endRank: int, names, channel):
 
 def saveNames(names, rank):
     """ Saves names to txt document """
-    percent = format((rank/names.maxRank) * 100, ".2f")
-    print("Progress: ", percent, "%", sep='')
+    if(names.maxRank != 0):
+        percent = format((rank/names.maxRank) * 100, ".2f")
+        print("Progress: ", percent, "%", sep='')
 
     namesFile = open("names.txt", "w", encoding='utf-8')
     characterString = '\n'.join(names.names)
@@ -136,8 +137,11 @@ async def on_message(message):
             return
         bulk = 100
         for rankStep in range(1, maxChars, bulk):
-            await retrieveNames(rankStep, rankStep + bulk, on_message.names, message.channel)
-            saveNames(on_message.names, rankStep + bulk)
+            endRange = rankStep + bulk
+            if(endRange >= maxChars):
+                endRange = maxChars + 1
+            await retrieveNames(rankStep, endRange, on_message.names, message.channel)
+            saveNames(on_message.names, endRange)
 
     if message.content.startswith(prefix + "continue"):
         lastRank = loadNames(on_message.names)
@@ -149,8 +153,37 @@ async def on_message(message):
             return
         bulk = 100
         for rankStep in range(lastRank, maxChars, bulk):
-            await retrieveNames(rankStep, rankStep + bulk, on_message.names, message.channel)
-            saveNames(on_message.names, rankStep + bulk)
+            endRange = rankStep + bulk
+            if(endRange >= maxChars):
+                endRange = maxChars + 1
+            await retrieveNames(rankStep, endRange, on_message.names, message.channel)
+            saveNames(on_message.names, endRange)
+
+    if message.content.startswith(prefix + "hunt"):
+        lastRank = loadNames(on_message.names)
+        if(lastRank == False):
+            logError("Unable to read last rank")
+            return
+        maxChars = await retrieveMaxChars(message.channel, on_message.names)
+        if(maxChars == False):
+            return
+        bulk = 100
+        for rankStep in range(lastRank, maxChars, bulk):
+            endRange = rankStep + bulk
+            if(endRange >= maxChars):
+                endRange = maxChars + 1
+            await retrieveNames(rankStep, endRange, on_message.names, message.channel)
+            saveNames(on_message.names, endRange)
+
+    if message.content.startswith(prefix + "add"):
+        lastRank = loadNames(on_message.names)
+        left = len(prefix + "add")
+        name = message.content[left:]
+        name = name.strip()
+        on_message.names.addName(name)
+        saveNames(on_message.names, lastRank)
+        
+
 
 on_message.names = NameRetriever()
 
