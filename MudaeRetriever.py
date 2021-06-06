@@ -160,20 +160,41 @@ async def on_message(message):
             saveNames(on_message.names, endRange)
 
     if message.content.startswith(prefix + "hunt"):
-        lastRank = loadNames(on_message.names)
-        if(lastRank == False):
+        leftignore = len(prefix + "hunt") + 1
+        args:list = message.content[leftignore:].split(' ')
+        badInputMsg = "Ussage: " + prefix + "hunt " + "[search point] [extent to search]"
+        if(len(args) < 2):
+            await message.channel.send(badInputMsg)
+            return
+        try:
+            suggest = int(args[0])
+            bounds = int(args[1])
+        except:
+            await message.channel.send(badInputMsg)
+            return
+
+        loadNames(on_message.names)
+        if(suggest == False):
             logError("Unable to read last rank")
             return
         maxChars = await retrieveMaxChars(message.channel, on_message.names)
         if(maxChars == False):
             return
-        bulk = 100
-        for rankStep in range(lastRank, maxChars, bulk):
-            endRange = rankStep + bulk
-            if(endRange >= maxChars):
-                endRange = maxChars + 1
-            await retrieveNames(rankStep, endRange, on_message.names, message.channel)
-            saveNames(on_message.names, endRange)
+
+        missing = maxChars - len(on_message.names.names)
+        print("Missing characters:",  missing)
+        lbound = suggest - bounds
+        rbound = suggest + bounds
+        if(lbound <= 0): lbound = 1
+        if(rbound >= maxChars): rbound = maxChars
+    
+        await retrieveNames(lbound, rbound, on_message.names, message.channel)
+        saveNames(on_message.names, rbound)
+
+        remaining = maxChars - len(on_message.names.names)
+        foundChars = missing - remaining
+        print("Done. Found:", foundChars, "Remaining:", remaining)
+
 
     if message.content.startswith(prefix + "add"):
         lastRank = loadNames(on_message.names)
