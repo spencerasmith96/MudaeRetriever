@@ -50,3 +50,30 @@ class NameRetriever:
         leftIgnore = len(prefix)
         self.maxRank = int(response[leftIgnore:])
         return self.maxRank
+
+    def save(self, rank):
+        """ Saves names to txt document """
+        if(self.maxRank != 0):
+            percent = format((rank/self.maxRank) * 100, ".2f")
+            print("Progress: ", percent, "%", sep='')
+
+        characterString = '\n'.join(self.names)
+        namesFile = open("names.txt", "w", encoding='utf-8')
+        namesFile.write("Characters: " + str(rank) + "\n" + characterString)
+        namesFile.close()
+
+    def load(self):
+        """ Loads names in names set and returns last saved rank """
+        namesFile = open("names.txt", "r", encoding='utf-8')
+
+        progressLine = namesFile.readline().rsplit(' ', 1)
+        lastRank = progressLine[1].strip()
+        if(lastRank.isdigit() == False):
+            namesFile.close()
+            return False
+
+        lastRank = int(lastRank)
+        thisNames = set(namesFile.read().splitlines())
+        self.names = thisNames
+        namesFile.close()
+        return lastRank
