@@ -6,6 +6,7 @@ from MudaeCharacter import MudaeCharacter
 from NameRetriever import NameRetriever
 from dotenv import load_dotenv
 from time import sleep
+import keyboard
 
 prefix = "?"
 mudaeID = 432610292342587392
@@ -77,6 +78,8 @@ async def retrieveNames(startRank: int, endRank: int, names, channel):
                 charRankMessage = await client.wait_for('message', check=check, timeout = 2.0)
             except asyncio.TimeoutError:
                 await channel.send("Mudae timed out. Retrying (" + str(retry + 1) + "/" + str(maxRetry) + ")")
+            except:
+                raise
 
             if(charRankMessage != False): # Names retrieves successfully
                 break
@@ -98,6 +101,79 @@ async def retrieveNames(startRank: int, endRank: int, names, channel):
             logError("Unable to add name: " + name + " at rank: " + str(rank))
             continue
 
+async def commandContinueNames(channel):
+    try:
+        lastRank = on_message.names.load()
+        if(lastRank == False):
+            logError("Unable to read last rank")
+            return
+        maxChars = await retrieveMaxChars(channel, on_message.names)
+        if(maxChars == False):
+            return
+        bulk = 100
+        for rankStep in range(lastRank, maxChars, bulk):
+            endRange = rankStep + bulk
+            if(endRange >= maxChars):
+                endRange = maxChars + 1
+            await retrieveNames(rankStep, endRange, on_message.names, channel)
+            on_message.names.save(endRange)
+    except asyncio.CancelledError:
+        on_message.names.save(rankStep)
+        print("Cancelled.")
+
+async def commandHuntNames(channel, suggest, bounds):
+    try:
+        on_message.names.load()
+        maxChars = await retrieveMaxChars(channel, on_message.names)
+        if(maxChars == False):
+            return
+
+        missing = maxChars - len(on_message.names.names)
+        print("Missing characters:",  missing)
+        lbound = suggest - bounds
+        rbound = suggest + bounds
+        if(lbound <= 0): lbound = 1
+        if(rbound >= maxChars): rbound = maxChars
+    
+        await retrieveNames(lbound, rbound, on_message.names, channel)
+        on_message.names.save(rbound)
+
+        remaining = maxChars - len(on_message.names.names)
+        foundChars = missing - remaining
+        print("Done. Found:", foundChars, "Remaining:", remaining)
+    except asyncio.CancelledError:
+        on_message.names.save(lbound)
+        print("Cancelled.")
+        remaining = maxChars - len(on_message.names.names)
+        foundChars = missing - remaining
+        print("Found:", foundChars, "Remaining:", remaining)
+
+async def commandGetAllNames(channel):
+    try:
+        maxChars = await retrieveMaxChars(channel, on_message.names)
+        if(maxChars == False):
+            return
+        bulk = 100
+        for rankStep in range(1, maxChars, bulk):
+            endRange = rankStep + bulk
+            if(endRange >= maxChars):
+                endRange = maxChars + 1
+            await retrieveNames(rankStep, endRange, on_message.names, channel)
+            on_message.names.save(endRange)
+    except asyncio.CancelledError:
+        on_message.names.save(rankStep)
+        print("Cancelled.")
+
+def cancelCommand(task, keyboardEvent):
+    task.cancel()
+    print("Canceling!")
+
+
+async def startCommand(command, *args):
+    task = asyncio.create_task(command(*args))
+    hookCancel = keyboard.on_release_key('esc', lambda a: cancelCommand(task, a))
+    await task
+    keyboard.unhook(hookCancel)
 
 @client.event
 async def on_message(message):
@@ -106,33 +182,11 @@ async def on_message(message):
     
     # Requests and compiles a list of all character names from Mudae
     if message.content.startswith(prefix + "getName"):
-        maxChars = await retrieveMaxChars(message.channel, on_message.names)
-        if(maxChars == False):
-            return
-        bulk = 100
-        for rankStep in range(1, maxChars, bulk):
-            endRange = rankStep + bulk
-            if(endRange >= maxChars):
-                endRange = maxChars + 1
-            await retrieveNames(rankStep, endRange, on_message.names, message.channel)
-            on_message.names.save(endRange)
+        await startCommand(commandGetAllNames, message.channel)
         return
 
     if message.content.startswith(prefix + "continue"):
-        lastRank = on_message.names.load()
-        if(lastRank == False):
-            logError("Unable to read last rank")
-            return
-        maxChars = await retrieveMaxChars(message.channel, on_message.names)
-        if(maxChars == False):
-            return
-        bulk = 100
-        for rankStep in range(lastRank, maxChars, bulk):
-            endRange = rankStep + bulk
-            if(endRange >= maxChars):
-                endRange = maxChars + 1
-            await retrieveNames(rankStep, endRange, on_message.names, message.channel)
-            on_message.names.save(endRange)
+        await startCommand(commandContinueNames, message.channel)
         return
 
     if message.content.startswith(prefix + "hunt"):
@@ -149,24 +203,7 @@ async def on_message(message):
             await message.channel.send(badInputMsg)
             return
 
-        on_message.names.load()
-        maxChars = await retrieveMaxChars(message.channel, on_message.names)
-        if(maxChars == False):
-            return
-
-        missing = maxChars - len(on_message.names.names)
-        print("Missing characters:",  missing)
-        lbound = suggest - bounds
-        rbound = suggest + bounds
-        if(lbound <= 0): lbound = 1
-        if(rbound >= maxChars): rbound = maxChars
-    
-        await retrieveNames(lbound, rbound, on_message.names, message.channel)
-        on_message.names.save(rbound)
-
-        remaining = maxChars - len(on_message.names.names)
-        foundChars = missing - remaining
-        print("Done. Found:", foundChars, "Remaining:", remaining)
+        await startCommand(commandHuntNames, message.channel, suggest, bounds)
         return
 
     if message.content.startswith(prefix + "listen"):
