@@ -7,6 +7,8 @@ from NameRetriever import NameRetriever
 from dotenv import load_dotenv
 from time import sleep
 import keyboard
+import KeyboardCommanding
+import sqlite3
 
 prefix = "?"
 mudaeID = 432610292342587392
@@ -164,6 +166,112 @@ async def commandGetAllNames(channel):
         on_message.names.save(rankStep)
         print("Cancelled.")
 
+def characterInDatabase(name, cur):
+    cur.execute("SELECT rowid FROM characters WHERE name=?", [name])
+    rows = cur.fetchall()
+    if(len(rows) > 0):
+        return True
+    return False
+
+async def requestCharacterData(name: str, channel):
+    maxRetry = 3
+    characterDataMessage = False
+    requestMessage = "$im " + name
+    for retry in range(maxRetry):
+        sleep(1)
+        KeyboardCommanding.writeCommand(requestMessage)
+        
+        def check(message):
+            if(message.author.id != mudaeID):
+                return False
+            if len(message.embeds) < 1:
+                return False
+            return True
+
+        try:
+            characterDataMessage = await client.wait_for('message', check=check, timeout = 2.0)
+        except asyncio.TimeoutError:
+            await channel.send("Mudae timed out. Retrying (" + str(retry + 1) + "/" + str(maxRetry) + ")")
+        except:
+            raise
+
+        if(characterDataMessage != False): # Names retrieves successfully
+            break
+
+    return characterDataMessage
+
+def parseCharacterData(message):
+    embed = message.embeds[0]
+
+    name: str = embed.author.name
+    seriesline = embed.description.splitlines()[0]
+    waifu = 0
+    husbando = 0
+    if("452463537508450304" in embed.description):
+        waifu = 1
+    if("452470164529872899" in embed.description):
+        husbando = 1
+
+    series: str = seriesline.rsplit('<', waifu + husbando)[0].strip()
+    imageurl: str = embed.image.url
+
+    data = [name, waifu, husbando, series, imageurl]
+    return data
+
+async def commandGetAllCharacters(channel):
+    try:
+        con = sqlite3.connect("Mudae.db")
+        cur = con.cursor()
+        on_message.names.load()
+
+        try:
+            cur.execute('''CREATE TABLE characters 
+                        (name text, waifu numeric, husbando numeric, series text, imageurl text)''')
+        except:
+            pass
+
+        def printProgress():
+            charactersInSet = len(on_message.names.names)
+            if(charactersInSet != 0):
+                cur.execute("SELECT COUNT(*) FROM characters")
+                line = cur.fetchone()
+                charactersInDB = line[0]
+
+                percent = format((charactersInDB/charactersInSet) * 100, ".2f")
+                print("Progress: ", percent, "%", sep='')
+
+        charactersSinceCommit = 0
+        commitOnCount = 50
+        for name in on_message.names.names:
+            if(characterInDatabase(name, cur)):
+                errorMsg = "Character already in database: " + name
+                await channel.send(errorMsg)
+                logError(errorMsg)
+                continue
+
+            characterDataMessage = await requestCharacterData(name, channel)
+            if(characterDataMessage == False):
+                errorMsg = "Error requesting character info for: " + name
+                await channel.send(errorMsg)
+                logError(errorMsg)
+                continue
+
+            data = parseCharacterData(characterDataMessage)
+            cur.execute("INSERT INTO characters VALUES (?, ?, ?, ?, ?)", data)
+            charactersSinceCommit += 1
+            if(charactersSinceCommit >= commitOnCount):
+                con.commit()
+                printProgress()
+                charactersSinceCommit = 0
+        
+        printProgress()
+        con.commit()
+        con.close()
+    except asyncio.CancelledError:
+        con.commit()
+        con.close()
+        print("Cancelled.")
+
 def cancelCommand(task, keyboardEvent):
     task.cancel()
     print("Canceling!")
@@ -211,11 +319,19 @@ async def on_message(message):
             return message.author.id == mudaeID
 
         newMessage = await client.wait_for('message', check=check)
-        print("Message:")
-        embed = newMessage.embeds[0]
-        print(embed.image.url)
-        print(embed.description) # 1st line: Series_Name <:emoji:>
-        print(embed.author.name) # Name
+        if len(newMessage.embeds) >= 1:
+            print("Message:")
+            embed = newMessage.embeds[0]
+            print(embed.image.url)
+            print(embed.description) # 1st line: Series_Name <:emoji:>
+            print(embed.author.name) # Name
+
+            if("452463537508450304" in embed.description):
+                print("female")
+            if("452470164529872899" in embed.description):
+                print("male")
+        else:
+            print("Embed not found")
         return
 
     if message.content.startswith(prefix + "add"):
@@ -226,6 +342,9 @@ async def on_message(message):
         on_message.names.addName(name)
         on_message.names.save(lastRank)
         return
+
+    if message.content.startswith(prefix + "getChars"):
+        await startCommand(commandGetAllCharacters, message.channel)
         
 
 
